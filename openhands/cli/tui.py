@@ -21,7 +21,8 @@ from prompt_toolkit.input import create_input
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 from prompt_toolkit.keys import Keys
-from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.containers import HSplit, VSplit, Window
+from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.lexers import Lexer
@@ -67,6 +68,7 @@ MAX_RECENT_THOUGHTS = 5
 COLOR_GOLD = '#FFD700'
 COLOR_GREY = '#808080'
 COLOR_AGENT_BLUE = '#4682B4'  # Steel blue - less saturated, works well on both light and dark backgrounds
+
 DEFAULT_STYLE = Style.from_dict(
     {
         'gold': COLOR_GOLD,
@@ -388,9 +390,12 @@ def display_error(error: str) -> None:
 
 
 def display_command(event: CmdRunAction) -> None:
+    # Create simple command frame
+    command_text = f'$ {event.command}'
+    
     container = Frame(
         TextArea(
-            text=f'$ {event.command}',
+            text=command_text,
             read_only=True,
             style=COLOR_GREY,
             wrap_lines=True,
@@ -771,20 +776,49 @@ async def read_prompt_input(
         return '/exit'
 
 
-async def read_confirmation_input(config: OpenHandsConfig) -> str:
+async def read_confirmation_input(config: OpenHandsConfig, pending_action=None) -> str:
     try:
-        choices = [
-            'Yes, proceed',
-            'No (and allow to enter instructions)',
-            "Always proceed (don't ask again)",
-        ]
+        # Get risk information from the pending action
+        safety_risk = None
+        if pending_action and hasattr(pending_action, 'safety_risk'):
+            safety_risk = getattr(pending_action, 'safety_risk')
+
+        # Only show confirmation dialog for HIGH risk commands
+        # For MEDIUM and LOW risk, auto-proceed (risk will be shown in action frame)
+        if safety_risk and safety_risk != 'HIGH':
+            return 'yes'  # Auto-proceed for non-HIGH risk commands
+
+        # Create risk-aware question (only for HIGH risk now)
+        if safety_risk == 'HIGH':
+            question = '🚨 HIGH RISK command detected.\nReview carefully before proceeding.\n\nChoose an option:'
+        else:
+            question = 'Choose an option:'
+
+        # Create risk-aware menu choices
+        if safety_risk == 'HIGH':
+            choices = [
+                '⚠️  Yes, proceed (HIGH RISK - Use with caution)',
+                '🛑 No (and allow to enter instructions)',
+                "🚀 Always proceed (don't ask again - NOT RECOMMENDED)",
+            ]
+            # For HIGH risk, map indices differently since we removed smart mode
+            choice_mapping = {0: 'yes', 1: 'no', 2: 'always'}
+        else:
+            choices = [
+                'Yes, proceed',
+                'No (and allow to enter instructions)',
+                'Smart mode: Auto-confirm LOW/MEDIUM, ask for HIGH risk',
+                "Always proceed (don't ask again)",
+            ]
+            # For non-HIGH risk, keep original mapping
+            choice_mapping = {0: 'yes', 1: 'no', 2: 'smart', 3: 'always'}
 
         # keep the outer coroutine responsive by using asyncio.to_thread which puts the blocking call app.run() of cli_confirm() in a separate thread
         index = await asyncio.to_thread(
-            cli_confirm, config, 'Choose an option:', choices
+            cli_confirm, config, question, choices, 0, safety_risk
         )
 
-        return {0: 'yes', 1: 'no', 2: 'always'}.get(index, 'no')
+        return choice_mapping.get(index, 'no')
 
     except (KeyboardInterrupt, EOFError):
         return 'no'
@@ -843,6 +877,7 @@ def cli_confirm(
     question: str = 'Are you sure?',
     choices: list[str] | None = None,
     initial_selection: int = 0,
+    safety_risk: str | None = None,
 ) -> int:
     """Display a confirmation prompt with the given question and choices.
 
@@ -853,8 +888,11 @@ def cli_confirm(
     selected = [initial_selection]  # Using list to allow modification in closure
 
     def get_choice_text() -> list:
+        # Use red styling for HIGH risk questions
+        question_style = 'class:risk-high' if safety_risk == 'HIGH' else 'class:question'
+
         return [
-            ('class:question', f'{question}\n\n'),
+            (question_style, f'{question}\n\n'),
         ] + [
             (
                 'class:selected' if i == selected[0] else 'class:unselected',
@@ -889,18 +927,35 @@ def cli_confirm(
     def _handle_enter(event: KeyPressEvent) -> None:
         event.app.exit(result=selected[0])
 
-    style = Style.from_dict({'selected': COLOR_GOLD, 'unselected': ''})
-
-    layout = Layout(
-        HSplit(
-            [
-                Window(
-                    FormattedTextControl(get_choice_text),
-                    always_hide_cursor=True,
-                )
-            ]
-        )
+    style = Style.from_dict(
+        {
+            'selected': COLOR_GOLD,
+            'unselected': '',
+            'question': '',
+            'risk-high': '#FF0000 bold',  # Red bold for HIGH risk
+        }
     )
+
+    # Create layout with risk-based styling - full width but limited height
+    content_window = Window(
+        FormattedTextControl(get_choice_text),
+        always_hide_cursor=True,
+        height=Dimension(max=8),  # Limit height to prevent screen takeover
+    )
+
+    # Add frame for HIGH risk commands
+    if safety_risk == 'HIGH':
+        layout = Layout(
+            HSplit([
+                Frame(
+                    content_window,
+                    title='🚨 HIGH RISK',
+                    style='fg:#FF0000 bold',  # Red color for HIGH risk
+                )
+            ])
+        )
+    else:
+        layout = Layout(HSplit([content_window]))
 
     app = Application(
         layout=layout,
