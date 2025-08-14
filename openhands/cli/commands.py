@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import toml
+import tomlkit
 from prompt_toolkit import HTML, print_formatted_text
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import clear, print_container
@@ -520,19 +521,54 @@ def load_config_file(file_path: Path) -> dict:
     if file_path.exists():
         try:
             with open(file_path, 'r') as f:
-                return toml.load(f)
+                return dict(tomlkit.load(f))
         except Exception:
-            pass
+            # Fallback for old toml files
+            try:
+                with open(file_path, 'r') as f:
+                    return toml.load(f)
+            except Exception:
+                pass
 
-    # Create directory if it doesn't exist
     file_path.parent.mkdir(parents=True, exist_ok=True)
     return {}
 
 
 def save_config_file(config_data: dict, file_path: Path) -> None:
     """Save the config file."""
+    doc = tomlkit.document()
+    
+    for section_name, section_data in config_data.items():
+        doc[section_name] = _convert_arrays_to_inline_tables(section_data)
+    
     with open(file_path, 'w') as f:
-        toml.dump(config_data, f)
+        f.write(tomlkit.dumps(doc))
+
+
+def _convert_arrays_to_inline_tables(data):
+    """Convert arrays of dicts to inline tables recursively."""
+    if isinstance(data, dict):
+        result = tomlkit.table()
+        for key, value in data.items():
+            if isinstance(value, list) and value and isinstance(value[0], dict):
+                # Array of dicts -> array of inline tables
+                array = tomlkit.array()
+                for item in value:
+                    if isinstance(item, dict):
+                        inline_table = tomlkit.inline_table()
+                        for k, v in item.items():
+                            inline_table[k] = v
+                        array.append(inline_table)
+                    else:
+                        array.append(item)
+                result[key] = array
+            else:
+                result[key] = _convert_arrays_to_inline_tables(value)
+        return result
+    elif isinstance(data, list):
+        return [_convert_arrays_to_inline_tables(item) for item in data]
+    else:
+        return data
 
 
 def _ensure_mcp_config_structure(config_data: dict) -> None:
