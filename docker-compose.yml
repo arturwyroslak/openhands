@@ -1,4 +1,3 @@
-
 services:
   openhands:
     build:
@@ -11,13 +10,17 @@ services:
       #- SANDBOX_USER_ID=${SANDBOX_USER_ID:-1234} # enable this only if you want a specific non-root sandbox user but you will have to manually adjust permissions of ~/.openhands for this user
       - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
     ports:
-      - "3000:3000"
+      - "3033:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.openhands:/.openhands
-      - ${WORKSPACE_BASE:-$PWD/workspace}:/opt/workspace_base
+      - docker.sock:/var/run/docker.sock
+      - openhands:/.openhands
+      - workspace:/opt/workspace_base
     pull_policy: build
     stdin_open: true
     tty: true
+volumes:
+  openhands:
+  workspace:
+  docker.sock:
