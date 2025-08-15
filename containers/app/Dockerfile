@@ -4,7 +4,7 @@ FROM node:24.5.0-bookworm-slim AS frontend-builder
 WORKDIR /app
 
 COPY frontend/package.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 COPY frontend ./
 RUN npm run build
