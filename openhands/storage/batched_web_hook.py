@@ -9,7 +9,7 @@ from openhands.storage.files import FileStore
 from openhands.utils.async_utils import EXECUTOR
 
 # Constants for batching configuration
-WEBHOOK_BATCH_TIMEOUT_SECONDS = 15.0
+WEBHOOK_BATCH_TIMEOUT_SECONDS = 5.0
 WEBHOOK_BATCH_SIZE_LIMIT_BYTES = 1048576  # 1MB
 
 
