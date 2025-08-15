@@ -11,6 +11,7 @@ from openhands.utils.async_utils import EXECUTOR
 # Constants for batching configuration
 WEBHOOK_BATCH_TIMEOUT_SECONDS = 5.0
 WEBHOOK_BATCH_SIZE_LIMIT_BYTES = 1048576  # 1MB
+WEBHOOK_BATCH_HTTP_CLIENT_TIMEOUT_SECONDS = 15.0
 
 
 class BatchedWebHookFileStore(FileStore):
@@ -65,7 +66,7 @@ class BatchedWebHookFileStore(FileStore):
         self.file_store = file_store
         self.base_url = base_url
         if client is None:
-            client = httpx.Client()
+            client = httpx.Client(timeout=WEBHOOK_BATCH_HTTP_CLIENT_TIMEOUT_SECONDS)
         self.client = client
 
         # Use provided values or default constants
