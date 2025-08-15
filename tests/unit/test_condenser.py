@@ -141,7 +141,7 @@ class RollingCondenserTestHarness:
                 case View() as view:
                     yield view
 
-                case Condensation(event=condensation_event):
+                case Condensation(action=condensation_event):
                     state.history.append(condensation_event)
                     # After adding a condensation event, get the new view
                     match self.condenser.condensed_history(state):
