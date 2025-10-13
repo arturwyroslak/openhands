@@ -9,7 +9,7 @@ RUN npm install --legacy-peer-deps
 COPY frontend ./
 RUN npm run build
 
-FROM python:3.13.6-slim AS base
+FROM python:3.14.0-slim AS base
 FROM base AS backend-builder
 
 WORKDIR /app
